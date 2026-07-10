@@ -24,6 +24,11 @@ def load_config():
     defaults = {
         "rename_agents": True,
         "rename_workspaces": True,
+        # "llm": summarize recent pane output into a short title with claude haiku
+        # "session": use the Claude Code session title (firstPrompt)
+        "agent_naming": "llm",
+        "llm_max_len": 12,
+        "llm_interval": 180,
         "max_len": 40,
         "mtime_window": 20,
     }
@@ -147,6 +152,61 @@ def clean_title(raw):
     return title[:MAX_LEN] if title else None
 
 
+def llm_title(pane_id):
+    """Summarize recent pane output into a short, complete title via claude haiku."""
+    read = (herdr("agent", "read", pane_id, "--lines", "80") or {}).get("read") or {}
+    content = read.get("text") or ""
+    if len(content.encode()) < 200:
+        return None  # too little context (agent just started)
+    limit = int(CFG["llm_max_len"])
+    prompt = (
+        "This is recent terminal output from an AI coding agent. Summarize the task "
+        f"the agent is working on as ONE complete, natural phrase of at most {limit} "
+        "characters, in the main language of the output. Output the title only: "
+        "no quotes, no trailing punctuation, no explanation."
+    )
+    title = ""
+    for hint in ("", f" Your previous answer was too long; {limit} characters MAXIMUM."):
+        try:
+            r = subprocess.run(
+                ["claude", "-p", "--model", "haiku", prompt + hint],
+                input=content, capture_output=True, text=True, timeout=90,
+            )
+        except Exception:
+            return None
+        lines = [ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip()]
+        title = lines[0].strip("\"'「」『』。.、,") if lines else ""
+        if title and len(title) <= limit:
+            return title
+    return title[:limit] if title else None
+
+
+def rename_agent_llm(pane_id):
+    slug = pane_id.replace(":", "_")
+    ts_key = "agent_" + slug + ".ts"
+    now = time.time()
+    try:
+        last = float(read_state(ts_key) or 0)
+    except ValueError:
+        last = 0
+    if now - last < float(CFG["llm_interval"]):
+        return
+    info = herdr("agent", "get", pane_id)
+    if not info:
+        return
+    agent = info.get("agent") or {}
+    current = agent.get("name") or ""
+    recorded = read_state("agent_" + slug + ".name")
+    if current and current != recorded:
+        return  # renamed manually — leave it alone
+    write_state(ts_key, str(now))
+    title = llm_title(pane_id)
+    if not title or title == current:
+        return
+    if herdr("agent", "rename", pane_id, title) is not None:
+        write_state("agent_" + slug + ".name", title)
+
+
 def rename_agent(pane_id):
     info = herdr("agent", "get", pane_id)
     if not info:
@@ -216,7 +276,10 @@ def main():
 
     if CFG["rename_agents"] and event == "pane.agent_status_changed":
         if (data.get("agent_status") or "").lower() == "idle" and pane_id:
-            rename_agent(pane_id)
+            if CFG["agent_naming"] == "llm":
+                rename_agent_llm(pane_id)
+            else:
+                rename_agent(pane_id)
     if CFG["rename_workspaces"] and ws_id:
         rename_workspace(ws_id)
 

@@ -13,8 +13,14 @@ directory** — no more sidebar full of identical `claude` rows.
 ## What it does
 
 - **Agents** — when a turn ends (agent goes `idle`), the pane's agent is
-  renamed to its Claude Code session title: the same `firstPrompt` you see in
-  the `claude --resume` picker. As the session moves on, the name stays stable.
+  renamed after what it is working on. Two modes:
+  - **`llm`** (default) — recent pane output is summarized by `claude` (haiku)
+    into one complete phrase of at most 12 characters, in the language of the
+    output. Names evolve as the task moves on; at most one rename per pane
+    every 3 minutes. Works for any agent whose pane herdr can read.
+  - **`session`** — the name is the Claude Code session title: the same
+    `firstPrompt` you see in the `claude --resume` picker. Stable per session,
+    follows `/clear` and `--resume`. Claude Code only.
 - **Workspaces** — renamed to the basename of the panes' live working
   directory (`foreground_cwd`), decided by majority vote across panes with the
   focused pane breaking ties. Works great with git worktrees
@@ -58,6 +64,9 @@ Optional. Create `config.json` in the plugin's config dir
 {
   "rename_agents": true,
   "rename_workspaces": true,
+  "agent_naming": "llm",
+  "llm_max_len": 12,
+  "llm_interval": 180,
   "max_len": 40,
   "mtime_window": 20
 }
@@ -65,10 +74,13 @@ Optional. Create `config.json` in the plugin's config dir
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `rename_agents` | `true` | Sync agent names to Claude session titles |
+| `rename_agents` | `true` | Auto-name agents |
 | `rename_workspaces` | `true` | Sync workspace labels to working directories |
-| `max_len` | `40` | Max name length |
-| `mtime_window` | `20` | Seconds for the session fallback correlation |
+| `agent_naming` | `"llm"` | `"llm"` (haiku summary) or `"session"` (Claude session title) |
+| `llm_max_len` | `12` | Max title length in llm mode |
+| `llm_interval` | `180` | Min seconds between renames per pane in llm mode |
+| `max_len` | `40` | Max name length in session mode |
+| `mtime_window` | `20` | Seconds for the session fallback correlation (session mode) |
 
 ## Notes
 
