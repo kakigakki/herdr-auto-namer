@@ -152,20 +152,26 @@ def rename_agent(pane_id):
     if not info:
         return
     agent = info.get("agent") or {}
-    key = "agent_" + pane_id.replace(":", "_") + ".name"
+    slug = pane_id.replace(":", "_")
     current = agent.get("name") or ""
-    recorded = read_state(key)
-    if current and current != recorded:
-        return  # renamed manually — leave it alone
     path = find_session_path(agent)
     if not path:
         return
+    session_id = os.path.splitext(os.path.basename(path))[0]
+    # Manual renames are respected within a session, but a session change
+    # always re-adopts the pane: the name follows the session.
+    recorded_session = read_state("agent_" + slug + ".session")
+    recorded_name = read_state("agent_" + slug + ".name")
+    if current and session_id == recorded_session and current != recorded_name:
+        return  # renamed manually during this session — leave it alone
     raw = session_title(path)
     title = clean_title(raw) if raw else None
-    if not title or title == current:
+    if not title:
         return
-    if herdr("agent", "rename", pane_id, title) is not None:
-        write_state(key, title)
+    if title != current and herdr("agent", "rename", pane_id, title) is None:
+        return
+    write_state("agent_" + slug + ".name", title)
+    write_state("agent_" + slug + ".session", session_id)
 
 
 def rename_workspace(ws_id):

@@ -19,8 +19,10 @@ directory** — no more sidebar full of identical `claude` rows.
   directory (`foreground_cwd`), decided by majority vote across panes with the
   focused pane breaking ties. Works great with git worktrees
   (`repo`, `repo-alt1`, …).
-- **Manual renames win** — the moment you rename an agent or workspace
-  yourself (differing from what this plugin set), it is never touched again.
+- **Manual renames win — within a session** — rename an agent yourself and
+  the plugin leaves it alone for the rest of that session; when the pane
+  moves to a new session, the name follows the session again. Manually
+  renamed workspaces are never touched again.
 
 ## Install
 
