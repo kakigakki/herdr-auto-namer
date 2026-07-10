@@ -77,11 +77,17 @@ def find_session_path(agent):
     the transcript written moments before the idle transition is this pane's
     session. Skips when ambiguous (several sessions active in the same dir).
     """
-    sess = agent.get("agent_session") or {}
-    path = sess.get("path") or agent.get("agent_session_path")
-    if path and os.path.exists(path):
-        return path
     cwd = agent.get("cwd") or ""
+    sess = agent.get("agent_session") or {}
+    value = sess.get("value") or sess.get("path") or agent.get("agent_session_path")
+    if value:
+        # kind == "path": transcript path; kind == "id": session uuid
+        if sess.get("kind") == "id" and cwd:
+            path = os.path.join(project_dir(cwd), value + ".jsonl")
+        else:
+            path = value
+        if os.path.exists(path):
+            return path
     if not cwd:
         return None
     now = time.time()
