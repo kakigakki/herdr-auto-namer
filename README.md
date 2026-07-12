@@ -6,9 +6,9 @@ directory** — no more sidebar full of identical `claude` rows.
 
 | Before | After |
 | --- | --- |
-| `nvim · claude` | `activefollow-chat · fix launcher visibility` |
-| `nvim · claude` | `activefollow-chat · migrate widget to snacks` |
-| `rails · claude` | `activefollow-rails · add UI tests` |
+| `nvim · claude` | `chat · fix launcher visibility` |
+| `nvim · claude` | `chat · migrate widget to snacks` |
+| `rails · claude` | `rails · add UI tests` |
 
 ## What it does
 
