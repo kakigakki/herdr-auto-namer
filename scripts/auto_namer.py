@@ -290,7 +290,10 @@ def rename_workspace(ws_id):
         cwd = p.get("foreground_cwd") or p.get("cwd") or ""
         if not cwd:
             continue
-        base = os.path.basename(cwd.rstrip("/"))
+        # Windows cwd values come back as "D:\path\like\this" - strip a
+        # trailing backslash too, or basename() returns "" instead of the
+        # dir name. Harmless on *nix since paths there never end in "\".
+        base = os.path.basename(cwd.rstrip("/\\"))
         counts[base] = counts.get(base, 0) + 1
         if p.get("focused"):
             focused_label = base

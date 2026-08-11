@@ -40,9 +40,16 @@ Herdr UI and outer title plugins can show the task without scraping session file
 herdr plugin install kakigakki/herdr-auto-namer
 ```
 
-Requirements: herdr ≥ 0.7.0, `python3` on `PATH`, macOS or Linux.
+Requirements: herdr ≥ 0.7.0, `python3` on `PATH`, macOS, Linux, or Windows.
 Agent naming currently supports **Claude Code**; workspace naming is
 agent-agnostic.
+
+On Windows, `python3` must resolve to a real interpreter, not the Microsoft
+Store's app execution alias stub. If `python3 --version` prints a Store
+redirect instead of a version number, either turn off the alias
+(Settings → Apps → Advanced app settings → App execution aliases) or copy
+`python.exe` to `python3.exe` inside your Python install directory so it
+resolves first on `PATH`.
 
 ## How agents are matched to sessions
 
