@@ -113,14 +113,12 @@ def apply_pane_title(pane_id, title, tab_id=None):
         "--ttl-ms",
         "86400000",
     )
-    # Tab label - free text, no slug restriction, unlike agent rename. Only
-    # renamed when this pane is the tab's sole occupant: a multi-pane tab has
-    # no single task, so leave the tab alone and let workspace naming (or a
-    # manual rename) speak for it instead.
+    # Tab label - free text, no slug restriction, unlike agent rename. Follows
+    # whichever pane just finished a turn, even in a split tab with a helper
+    # shell/editor alongside it - simplest option, and combining every pane's
+    # content into one shared title would need its own extra LLM call.
     if tab_id:
-        pane_count = (herdr("tab", "get", tab_id) or {}).get("tab", {}).get("pane_count")
-        if pane_count == 1:
-            herdr_ok("tab", "rename", tab_id, title)
+        herdr_ok("tab", "rename", tab_id, title)
 
 
 def read_state(key):
