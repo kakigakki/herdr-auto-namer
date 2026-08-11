@@ -5,8 +5,10 @@ after their Claude Code **session title**, workspaces after their **working
 directory** — no more sidebar full of identical `claude` rows.
 
 In addition to `herdr agent rename`, this plugin also renames the **pane** and
-publishes `pane.report-metadata` (`--title`, `--display-agent`, `$task`) so the
-Herdr UI and outer title plugins can show the task without scraping session files.
+the **tab** (whichever pane most recently finished a turn, split tab or not),
+and publishes `pane.report-metadata` (`--title`, `--display-agent`, `$task`)
+so the Herdr UI and outer title plugins can show the task without scraping
+session files.
 
 | Before | After |
 | --- | --- |
@@ -98,6 +100,23 @@ Optional. Create `config.json` in the plugin's config dir
 - Everything runs locally; nothing is sent anywhere.
 - State (what the plugin named things) lives in the plugin config dir;
   delete it to let the plugin re-adopt manually-renamed items.
+- **Title length limits** — checked directly against herdr, these vary by
+  field and most are *not* enforced by herdr at all:
+  - `agent rename` — herdr hard-caps this at 32 chars, and restricts it to
+    `^[a-z][a-z0-9_-]*$` (no spaces/caps/punctuation). This plugin slugifies
+    before calling it; the readable title goes everywhere else unchanged.
+  - `report-metadata --title` / `--display-agent` — herdr silently truncates
+    these to 80 chars. Tested with a 200-char string to confirm.
+  - `pane rename`, `tab rename`, `workspace rename` — herdr enforces **no
+    limit** on any of these (tested at 200 chars, accepted verbatim). Any
+    truncation you see in a narrow sidebar row or tab label is the UI
+    rendering it, not herdr or this plugin capping the string.
+  - In practice `llm_max_len` (12 chars, default `llm` mode) is the real
+    constraint and comfortably fits tight UI areas. `max_len` (40 chars,
+    `session` mode) is wide enough to overflow a narrow tab label - nothing
+    downstream trims it further. Workspace naming (dir basename) has no cap
+    in this plugin's code either, though an unreasonably long directory name
+    is an unlikely edge case in practice.
 
 ## License
 
