@@ -85,8 +85,9 @@ def herdr_text(*args):
     except Exception:
         return ""
 
-def apply_pane_title(pane_id, title):
-    """Also rename the pane and publish title metadata alongside agent rename.
+def apply_pane_title(pane_id, title, tab_id=None):
+    """Also rename the pane (and its tab) and publish title metadata alongside
+    agent rename.
 
     Official integrations only report lifecycle state. Pane title metadata is
     what makes the Herdr sidebar / outer title plugins useful for multi-agent
@@ -112,6 +113,14 @@ def apply_pane_title(pane_id, title):
         "--ttl-ms",
         "86400000",
     )
+    # Tab label - free text, no slug restriction, unlike agent rename. Only
+    # renamed when this pane is the tab's sole occupant: a multi-pane tab has
+    # no single task, so leave the tab alone and let workspace naming (or a
+    # manual rename) speak for it instead.
+    if tab_id:
+        pane_count = (herdr("tab", "get", tab_id) or {}).get("tab", {}).get("pane_count")
+        if pane_count == 1:
+            herdr_ok("tab", "rename", tab_id, title)
 
 
 def read_state(key):
@@ -279,7 +288,7 @@ def rename_agent_llm(pane_id):
         return
     if herdr("agent", "rename", pane_id, agent_name) is not None:
         write_state("agent_" + slug + ".name", agent_name)
-        apply_pane_title(pane_id, title)
+        apply_pane_title(pane_id, title, agent.get("tab_id"))
 
 
 def rename_agent(pane_id):
@@ -310,7 +319,7 @@ def rename_agent(pane_id):
         return
     write_state("agent_" + slug + ".name", agent_name)
     write_state("agent_" + slug + ".session", session_id)
-    apply_pane_title(pane_id, title)
+    apply_pane_title(pane_id, title, agent.get("tab_id"))
 
 
 def rename_workspace(ws_id):
