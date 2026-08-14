@@ -328,9 +328,11 @@ def rename_workspace(ws_id):
     panes = (herdr("pane", "list", "--workspace", ws_id) or {}).get("panes") or []
     if not panes:
         return
-    # Majority vote over live working directories; focused pane breaks ties.
+    # Majority vote over live working directories. A genuine tie means the
+    # workspace mixes unrelated projects across tabs - nothing dominates, so
+    # leave the current label alone instead of flip-flopping based on
+    # whichever pane you last happened to focus.
     counts = {}
-    focused_label = None
     for p in panes:
         cwd = p.get("foreground_cwd") or p.get("cwd") or ""
         if not cwd:
@@ -340,13 +342,13 @@ def rename_workspace(ws_id):
         # dir name. Harmless on *nix since paths there never end in "\".
         base = os.path.basename(cwd.rstrip("/\\"))
         counts[base] = counts.get(base, 0) + 1
-        if p.get("focused"):
-            focused_label = base
     if not counts:
         return
     best = max(counts.values())
     top = [b for b, c in counts.items() if c == best]
-    label = focused_label if focused_label in top else top[0]
+    if len(top) > 1:
+        return  # tied - no clear majority, don't reassign
+    label = top[0]
     if not label or label == current:
         return
     key = "ws_" + ws_id + ".name"
