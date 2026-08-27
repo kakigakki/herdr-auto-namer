@@ -50,7 +50,10 @@ MAX_LEN = int(CFG["max_len"])
 
 def herdr(*args):
     try:
-        r = subprocess.run(["herdr", *args], capture_output=True, text=True, timeout=10)
+        r = subprocess.run(
+            ["herdr", *args], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=10,
+        )
         if r.returncode != 0:
             return None
         return json.loads(r.stdout)["result"]
@@ -60,13 +63,31 @@ def herdr(*args):
 def herdr_ok(*args):
     """Run a herdr command that may not return JSON (rename / report-metadata)."""
     try:
-        r = subprocess.run(["herdr", *args], capture_output=True, text=True, timeout=10)
+        r = subprocess.run(
+            ["herdr", *args], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=10,
+        )
         return r.returncode == 0
     except Exception:
         return False
 
-def apply_pane_title(pane_id, title):
-    """Also rename the pane and publish title metadata alongside agent rename.
+
+def herdr_text(*args):
+    """Run a herdr command whose output is plain text, not the {"result": ...}
+    JSON envelope - "agent read" / "pane read" have no --json option and just
+    print the pane's terminal content. Returns "" on any failure (fail open)."""
+    try:
+        r = subprocess.run(
+            ["herdr", *args], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=10,
+        )
+        return r.stdout if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+def apply_pane_title(pane_id, title, tab_id=None):
+    """Also rename the pane (and its tab) and publish title metadata alongside
+    agent rename.
 
     Official integrations only report lifecycle state. Pane title metadata is
     what makes the Herdr sidebar / outer title plugins useful for multi-agent
@@ -92,6 +113,12 @@ def apply_pane_title(pane_id, title):
         "--ttl-ms",
         "86400000",
     )
+    # Tab label - free text, no slug restriction, unlike agent rename. Follows
+    # whichever pane just finished a turn, even in a split tab with a helper
+    # shell/editor alongside it - simplest option, and combining every pane's
+    # content into one shared title would need its own extra LLM call.
+    if tab_id:
+        herdr_ok("tab", "rename", tab_id, title)
 
 
 def read_state(key):
@@ -191,10 +218,21 @@ def clean_title(raw):
     return title[:MAX_LEN] if title else None
 
 
+def slugify_agent_name(text):
+    """``herdr agent rename`` only accepts ^[a-z][a-z0-9_-]{0,31}$ (this herdr
+    version rejects spaces/caps/punctuation outright), unlike pane rename and
+    report-metadata which take free text. Squash a readable title down to a
+    name that fits, or None if nothing usable survives."""
+    s = re.sub(r"[^a-z0-9_-]+", "-", text.lower())
+    s = re.sub(r"-{2,}", "-", s).strip("-")
+    s = s.lstrip("0123456789_-")
+    s = s[:32].strip("-")
+    return s or None
+
+
 def llm_title(pane_id):
     """Summarize recent pane output into a short, complete title via claude haiku."""
-    read = (herdr("agent", "read", pane_id, "--lines", "80") or {}).get("read") or {}
-    content = read.get("text") or ""
+    content = herdr_text("agent", "read", pane_id, "--lines", "80")
     if len(content.encode()) < 200:
         return None  # too little context (agent just started)
     limit = int(CFG["llm_max_len"])
@@ -209,7 +247,8 @@ def llm_title(pane_id):
         try:
             r = subprocess.run(
                 ["claude", "-p", "--model", "haiku", prompt + hint],
-                input=content, capture_output=True, text=True, timeout=90,
+                input=content, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=90,
             )
         except Exception:
             return None
@@ -240,11 +279,14 @@ def rename_agent_llm(pane_id):
         return  # renamed manually — leave it alone
     write_state(ts_key, str(now))
     title = llm_title(pane_id)
-    if not title or title == current:
+    if not title:
         return
-    if herdr("agent", "rename", pane_id, title) is not None:
-        write_state("agent_" + slug + ".name", title)
-        apply_pane_title(pane_id, title)
+    agent_name = slugify_agent_name(title)
+    if not agent_name or agent_name == current:
+        return
+    if herdr("agent", "rename", pane_id, agent_name) is not None:
+        write_state("agent_" + slug + ".name", agent_name)
+        apply_pane_title(pane_id, title, agent.get("tab_id"))
 
 
 def rename_agent(pane_id):
@@ -268,11 +310,14 @@ def rename_agent(pane_id):
     title = clean_title(raw) if raw else None
     if not title:
         return
-    if title != current and herdr("agent", "rename", pane_id, title) is None:
+    agent_name = slugify_agent_name(title)
+    if not agent_name:
         return
-    write_state("agent_" + slug + ".name", title)
+    if agent_name != current and herdr("agent", "rename", pane_id, agent_name) is None:
+        return
+    write_state("agent_" + slug + ".name", agent_name)
     write_state("agent_" + slug + ".session", session_id)
-    apply_pane_title(pane_id, title)
+    apply_pane_title(pane_id, title, agent.get("tab_id"))
 
 
 def rename_workspace(ws_id):
@@ -283,22 +328,27 @@ def rename_workspace(ws_id):
     panes = (herdr("pane", "list", "--workspace", ws_id) or {}).get("panes") or []
     if not panes:
         return
-    # Majority vote over live working directories; focused pane breaks ties.
+    # Majority vote over live working directories. A genuine tie means the
+    # workspace mixes unrelated projects across tabs - nothing dominates, so
+    # leave the current label alone instead of flip-flopping based on
+    # whichever pane you last happened to focus.
     counts = {}
-    focused_label = None
     for p in panes:
         cwd = p.get("foreground_cwd") or p.get("cwd") or ""
         if not cwd:
             continue
-        base = os.path.basename(cwd.rstrip("/"))
+        # Windows cwd values come back as "D:\path\like\this" - strip a
+        # trailing backslash too, or basename() returns "" instead of the
+        # dir name. Harmless on *nix since paths there never end in "\".
+        base = os.path.basename(cwd.rstrip("/\\"))
         counts[base] = counts.get(base, 0) + 1
-        if p.get("focused"):
-            focused_label = base
     if not counts:
         return
     best = max(counts.values())
     top = [b for b, c in counts.items() if c == best]
-    label = focused_label if focused_label in top else top[0]
+    if len(top) > 1:
+        return  # tied - no clear majority, don't reassign
+    label = top[0]
     if not label or label == current:
         return
     key = "ws_" + ws_id + ".name"

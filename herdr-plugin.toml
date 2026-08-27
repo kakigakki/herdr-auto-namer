@@ -3,7 +3,7 @@ name = "Auto Namer"
 version = "1.0.0"
 min_herdr_version = "0.7.0"
 description = "ChatGPT-style auto-naming: agents get their Claude session title, workspaces get their working directory"
-platforms = ["macos", "linux"]
+platforms = ["macos", "linux", "windows"]
 
 [[events]]
 on = "pane.agent_status_changed"
