@@ -7,6 +7,9 @@
   (``foreground_cwd``) of their panes, majority vote, focused pane breaks ties.
 - Manual renames are respected: once a name differs from what this plugin
   recorded, that agent/workspace is never touched again.
+- Alongside agent rename, also renames the pane and publishes pane title
+  metadata (``report-metadata --title/--display-agent``) so the Herdr UI and
+  outer title plugins see the same task identity.
 """
 import glob
 import json
@@ -53,6 +56,42 @@ def herdr(*args):
         return json.loads(r.stdout)["result"]
     except Exception:
         return None
+
+def herdr_ok(*args):
+    """Run a herdr command that may not return JSON (rename / report-metadata)."""
+    try:
+        r = subprocess.run(["herdr", *args], capture_output=True, text=True, timeout=10)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+def apply_pane_title(pane_id, title):
+    """Also rename the pane and publish title metadata alongside agent rename.
+
+    Official integrations only report lifecycle state. Pane title metadata is
+    what makes the Herdr sidebar / outer title plugins useful for multi-agent
+    work. Fail open: never block agent rename if this fails.
+    """
+    if not pane_id or not title:
+        return
+    # Persistent pane label (shown in layouts / pane chrome).
+    herdr_ok("pane", "rename", pane_id, title)
+    # Display-only metadata (sidebar title + display-agent + $task token).
+    herdr_ok(
+        "pane",
+        "report-metadata",
+        pane_id,
+        "--source",
+        "plugin:herdr-auto-namer",
+        "--title",
+        title,
+        "--display-agent",
+        title,
+        "--token",
+        f"task={title}",
+        "--ttl-ms",
+        "86400000",
+    )
 
 
 def read_state(key):
@@ -205,6 +244,7 @@ def rename_agent_llm(pane_id):
         return
     if herdr("agent", "rename", pane_id, title) is not None:
         write_state("agent_" + slug + ".name", title)
+        apply_pane_title(pane_id, title)
 
 
 def rename_agent(pane_id):
@@ -232,6 +272,7 @@ def rename_agent(pane_id):
         return
     write_state("agent_" + slug + ".name", title)
     write_state("agent_" + slug + ".session", session_id)
+    apply_pane_title(pane_id, title)
 
 
 def rename_workspace(ws_id):

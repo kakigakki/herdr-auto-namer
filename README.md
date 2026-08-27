@@ -4,6 +4,10 @@ ChatGPT-style automatic naming for [herdr](https://herdr.dev): agents are named
 after their Claude Code **session title**, workspaces after their **working
 directory** — no more sidebar full of identical `claude` rows.
 
+In addition to `herdr agent rename`, this plugin also renames the **pane** and
+publishes `pane.report-metadata` (`--title`, `--display-agent`, `$task`) so the
+Herdr UI and outer title plugins can show the task without scraping session files.
+
 | Before | After |
 | --- | --- |
 | `nvim · claude` | `chat · fix launcher visibility` |
