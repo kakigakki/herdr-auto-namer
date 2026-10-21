@@ -94,6 +94,12 @@ Optional. Create `config.json` in the plugin's config dir
 | `llm_interval` | `180` | Min seconds between renames per pane in llm mode |
 | `max_len` | `40` | Max name length in session mode |
 | `mtime_window` | `20` | Seconds for the session fallback correlation (session mode) |
+| `workspace_aliases` | `{}` | Exact directory-name → label map, e.g. `{"acme-backend-api": "api"}` |
+| `workspace_strip_prefixes` | `[]` | Prefixes removed from directory names when no alias matches, e.g. `["acme-"]` |
+
+Workspace labels are matched against both the full directory name and its
+shortened form, so a workspace still showing the long default label is renamed
+to the short one instead of being treated as a manual name.
 
 ## Notes
 

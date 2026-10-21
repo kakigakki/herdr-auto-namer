@@ -34,6 +34,10 @@ def load_config():
         "llm_interval": 180,
         "max_len": 40,
         "mtime_window": 20,
+        # Shorter workspace labels: exact renames first, then the first matching
+        # prefix is stripped, e.g. {"my-company-api": "api"} / ["my-company-"].
+        "workspace_aliases": {},
+        "workspace_strip_prefixes": [],
     }
     try:
         with open(os.path.join(STATE_DIR, "config.json")) as f:
@@ -320,6 +324,17 @@ def rename_agent(pane_id):
     apply_pane_title(pane_id, title, agent.get("tab_id"))
 
 
+def short_label(base):
+    """Apply ``workspace_aliases`` / ``workspace_strip_prefixes`` to a dir name."""
+    aliases = CFG.get("workspace_aliases") or {}
+    if base in aliases:
+        return aliases[base]
+    for prefix in CFG.get("workspace_strip_prefixes") or []:
+        if base.startswith(prefix) and len(base) > len(prefix):
+            return base[len(prefix):]
+    return base
+
+
 def rename_workspace(ws_id):
     ws = herdr("workspace", "get", ws_id)
     if not ws:
@@ -333,6 +348,7 @@ def rename_workspace(ws_id):
     # leave the current label alone instead of flip-flopping based on
     # whichever pane you last happened to focus.
     counts = {}
+    raw_bases = set()
     for p in panes:
         cwd = p.get("foreground_cwd") or p.get("cwd") or ""
         if not cwd:
@@ -341,6 +357,8 @@ def rename_workspace(ws_id):
         # trailing backslash too, or basename() returns "" instead of the
         # dir name. Harmless on *nix since paths there never end in "\".
         base = os.path.basename(cwd.rstrip("/\\"))
+        raw_bases.add(base)
+        base = short_label(base)
         counts[base] = counts.get(base, 0) + 1
     if not counts:
         return
@@ -355,7 +373,7 @@ def rename_workspace(ws_id):
     recorded = read_state(key)
     if recorded and current != recorded:
         return  # renamed manually after adoption — leave it alone
-    if not recorded and current and current not in counts:
+    if not recorded and current and current not in counts and current not in raw_bases:
         # herdr's default label is the root pane's cwd name, so a label that
         # matches no pane's cwd was chosen explicitly (created with --label or
         # renamed by hand). Protect it permanently as a manual name.
