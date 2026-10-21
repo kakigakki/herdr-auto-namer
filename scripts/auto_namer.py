@@ -355,6 +355,12 @@ def rename_workspace(ws_id):
     recorded = read_state(key)
     if recorded and current != recorded:
         return  # renamed manually after adoption — leave it alone
+    if not recorded and current and current not in counts:
+        # herdr's default label is the root pane's cwd name, so a label that
+        # matches no pane's cwd was chosen explicitly (created with --label or
+        # renamed by hand). Protect it permanently as a manual name.
+        write_state(key, "__manual__")
+        return
     if herdr("workspace", "rename", ws_id, label) is not None:
         write_state(key, label)
 
